@@ -2,7 +2,8 @@ package main
 
 import (  
 	git "github.com/libgit2/git2go"  
-	log "github.com/sirupsen/logrus" 
+	log "github.com/sirupsen/logrus"
+	"encoding/json"
 
 )  
 
@@ -56,12 +57,13 @@ func main() {
   // 	Flags    StatusOpt
   // 	Pathspec []string
   // }
-  StatusOptions:=&git.StatusOptions{Show:git.StatusShowIndexAndWorkdir,Flags:git.StatusOptIncludeUntracked};
+  flag := git.StatusOptIncludeUntracked | git.StatusOptRenamesHeadToIndex | git.StatusOptSortCaseSensitively
+  StatusOptions:=&git.StatusOptions{Show:git.StatusShowIndexAndWorkdir,Flags:flag};
   StatusList, err := Repository.StatusList(StatusOptions)  
   if err != nil {  
-		  log.Print(err)  
+		  log.Print(err)
+		  return 
   }
-
   //修改的文件数量
   count, err:=StatusList.EntryCount()
   if err != nil {  
@@ -69,32 +71,166 @@ func main() {
   }
   log.Print("the cout is ",count)
 
+  var statusFiles []map[string]interface{}
+  var statusFilesAll []map[string]interface{}
   for i := 0;i < count; i++ {
-
+	  //状态条目entry
 	  entry, err := StatusList.ByIndex(i)
 	  if err != nil{
 		  log.Println(err)
 	  }
-	  var S string
-	  var file git.DiffFile = entry.IndexToWorkdir.OldFile
-	  if entry.Status == git.StatusIndexNew {
-		  //git add 以后就要去索引区了
-		  file = entry.IndexToWorkdir.NewFile
-	  }	
-	  if entry.Status == git.StatusWtNew {
-		  S = "A" 
-	  } else if entry.Status == git.StatusWtModified {
-		  S = "M"
-	  } else if entry.Status == git.StatusWtDeleted {
-		  S = "D"
-	  } else {
-		  S = "?"
-	  }
-	  log.Printf("%s %s %d %d",S,file.Path,file.Flags,file.Mode)
+	  //log.Println("Status is ",entry.Status)
+	  //entry的结构
+	// type StatusEntry struct {
+	// 	Status         Status //一个值
+	// 	HeadToIndex    DiffDelta
+	// 	IndexToWorkdir DiffDelta
+	// }
+	//DiffDelta的结构
+	// type DiffDelta struct {
+	// 	Status     Delta//一个值 0-10
+	// 	Flags      DiffFlag//一个值 1,2,4,8
+	// 	Similarity uint16
+	// 	OldFile    DiffFile //旧
+	// 	NewFile    DiffFile //新
+	// }
+	//DiffFile 的结构
+
+	// type DiffFile struct {
+	// 	Path  string //文件路径
+	// 	Oid   *Oid //hash 值
+	// 	Size  int  //大小
+	// 	Flags DiffFlag //一个值 1,2,4,8
+	// 	Mode  uint16 //文件权限
+	// }
+	statusFilesItem := make(map[string]interface{})
+	statusFilesItemAll := make(map[string]interface{})
+
+	headToIndex := entry.HeadToIndex;
+	indexToWorkdir := entry.IndexToWorkdir;
+	// Index 中的状态
+	switch headToIndex.Status {
+		case git.DeltaUnmodified:
+			statusFilesItem["hi_status"] = git.DeltaUnmodified
+			statusFilesItem["hi_status_msg"] = nil
+		case git.DeltaAdded:
+			statusFilesItem["hi_status"] = git.DeltaAdded
+			statusFilesItem["hi_status_msg"] = "Added"
+		case git.DeltaDeleted:
+			statusFilesItem["hi_status"] = git.DeltaDeleted
+			statusFilesItem["hi_status_msg"] = "Deleted"
+		case git.DeltaModified:
+			statusFilesItem["hi_status"] = git.DeltaModified
+			statusFilesItem["hi_status_msg"] = "Modified"
+		case git.DeltaRenamed:
+			statusFilesItem["hi_status"] = git.DeltaRenamed
+			statusFilesItem["hi_status_msg"] = "Renamed"
+		case git.DeltaCopied:
+			statusFilesItem["hi_status"] = git.DeltaCopied
+			statusFilesItem["hi_status_msg"] = "Copied"
+		case git.DeltaIgnored:
+			statusFilesItem["hi_status"] = git.DeltaIgnored
+			statusFilesItem["hi_status_msg"] = "Ignored"
+		case git.DeltaUntracked:
+			statusFilesItem["hi_status"] = git.DeltaUntracked
+			statusFilesItem["hi_status_msg"] = "Untracked"
+		case git.DeltaTypeChange:
+			statusFilesItem["hi_status"] = git.DeltaTypeChange
+			statusFilesItem["hi_status_msg"] = "TypeChange"
+		case git.DeltaUnreadable:
+			statusFilesItem["hi_status"] = git.DeltaUnreadable
+			statusFilesItem["hi_status_msg"] = "Unreadable"
+		case git.DeltaConflicted:
+			statusFilesItem["hi_status"] = git.DeltaConflicted
+			statusFilesItem["hi_status_msg"] = "Conflicted"
+		default:
+			statusFilesItem["hi_status"] = -1
+			statusFilesItem["hi_status_msg"] = "Unknown"
+	}
+	// 工作区中的状态
+	switch indexToWorkdir.Status {
+		case git.DeltaUnmodified:
+			statusFilesItem["iw_status"] = git.DeltaUnmodified
+			statusFilesItem["iw_status_msg"] = nil
+		case git.DeltaAdded:
+			statusFilesItem["iw_status"] = git.DeltaAdded
+			statusFilesItem["iw_status_msg"] = "Added"
+		case git.DeltaDeleted:
+			statusFilesItem["iw_status"] = git.DeltaDeleted
+			statusFilesItem["iw_status_msg"] = "Deleted"
+		case git.DeltaModified:
+			statusFilesItem["iw_status"] = git.DeltaModified
+			statusFilesItem["iw_status_msg"] = "Modified"
+		case git.DeltaRenamed:
+			statusFilesItem["iw_status"] = git.DeltaRenamed
+			statusFilesItem["iw_status_msg"] = "Renamed"
+		case git.DeltaCopied:
+			statusFilesItem["iw_status"] = git.DeltaCopied
+			statusFilesItem["iw_status_msg"] = "Copied"
+		case git.DeltaIgnored:
+			statusFilesItem["iw_status"] = git.DeltaIgnored
+			statusFilesItem["iw_status_msg"] = "Ignored"
+		case git.DeltaUntracked:
+			statusFilesItem["iw_status"] = git.DeltaUntracked
+			statusFilesItem["iw_status_msg"] = "Untracked"
+		case git.DeltaTypeChange:
+			statusFilesItem["iw_status"] = git.DeltaTypeChange
+			statusFilesItem["iw_status_msg"] = "TypeChange"
+		case git.DeltaUnreadable:
+			statusFilesItem["iw_status"] = git.DeltaUnreadable
+			statusFilesItem["iw_status_msg"] = "Unreadable"
+		case git.DeltaConflicted:
+			statusFilesItem["iw_status"] = git.DeltaConflicted
+			statusFilesItem["iw_status_msg"] = "Conflicted"
+		default:
+			statusFilesItem["iw_status"] = -1
+			statusFilesItem["iw_status_msg"] = "Unknown"
+	}
+	statusFilesItem["hi_file_old"]=headToIndex.OldFile.Path
+	statusFilesItem["hi_file_new"]=headToIndex.NewFile.Path
+	statusFilesItem["iw_file_old"]=indexToWorkdir.OldFile.Path
+	statusFilesItem["iw_file_new"]=indexToWorkdir.NewFile.Path
+	statusFiles = append(statusFiles,statusFilesItem)
+
+	if statusFilesItem["hi_status"] != git.DeltaUnmodified {
+		statusFilesItemAll["status"] = statusFilesItem["hi_status"]
+		statusFilesItemAll["status_msg"] = statusFilesItem["hi_status_msg"]
+		statusFilesItemAll["file"] = statusFilesItem["hi_file_new"]
+	}
+	if statusFilesItem["iw_status"] != git.DeltaUnmodified {
+		statusFilesItemAll["status"] = statusFilesItem["iw_status"]
+		statusFilesItemAll["status_msg"] = statusFilesItem["iw_status_msg"]
+		statusFilesItemAll["file"] = statusFilesItem["iw_file_new"]
+	}
+
+	if statusFilesItem["hi_status"] != git.DeltaUnmodified && statusFilesItem["iw_status"] != git.DeltaUnmodified {
+		statusFilesItemAll["status"] = statusFilesItem["iw_status"]
+		statusFilesItemAll["status_msg"] = statusFilesItem["iw_status_msg"]
+		statusFilesItemAll["file"] = statusFilesItem["iw_file_new"]
+	}
+	statusFilesAll = append(statusFilesAll,statusFilesItemAll)
+
+	//   var S string
+	//   var file git.DiffFile = entry.IndexToWorkdir.OldFile
+	//   if entry.Status == git.StatusIndexNew {
+	// 	  //git add 以后就要去索引区了
+	// 	  file = entry.IndexToWorkdir.NewFile
+	//   }	
+	//   if entry.Status == git.StatusWtNew {
+	// 	  S += "A" 
+	//   } else if entry.Status == git.StatusWtModified {
+	// 	  S += "M"
+	//   } else if entry.Status == git.StatusWtDeleted {
+	// 	  S += "D"
+	//   } else {
+	// 	  S += "?"
+	//   }
 	  
-	  log.Println("Status is ",entry.Status)
-	  log.Println("HeadToIndex is ",entry.HeadToIndex)//git add 后进了索引区
-	  log.Println("IndexToWorkdir is ",entry.IndexToWorkdir)// 在工作目录
+	//   log.Println(S,file.Path,file.Flags)
+	//   log.Println("Status is ",entry.Status)
+	  
+	//   log.Println("HeadToIndex is ",entry.HeadToIndex)//git add 后进了索引区
+	//   log.Println("IndexToWorkdir is ",entry.IndexToWorkdir)// 在工作目录
 	  
 	  // log.Println("Status",entry.IndexToWorkdir.Status)
 	  // log.Println("Flags",entry.IndexToWorkdir.Flags)
@@ -103,6 +239,10 @@ func main() {
 	  // log.Println("NewFile",entry.IndexToWorkdir.NewFile)
   }
 
+  b, _ := json.Marshal(statusFiles)
+  c, _ := json.Marshal(statusFilesAll)
+  log.Println(string(b))
+  log.Println(string(c))
   // type DiffFile struct {
   // 	Path  string
   // 	Oid   *Oid
@@ -118,32 +258,41 @@ func main() {
   // 	OldFile    DiffFile
   // 	NewFile    DiffFile
   // }
-
+  //什么状态没有
   log.Println("StatusCurrent         = ",git.StatusCurrent )
-  log.Println("StatusIndexNew        = ",git.StatusIndexNew )
-  log.Println("StatusIndexModified   = ",git.StatusIndexModified )
-  log.Println("StatusIndexDeleted    = ",git.StatusIndexDeleted )
+  
+  //索引中的状态
+  log.Println("StatusIndexNew        = ",git.StatusIndexNew )//新建文件执行git add 后的状态
+  log.Println("StatusIndexModified   = ",git.StatusIndexModified )//修改旧文件执行git add 后的状态
+  log.Println("StatusIndexDeleted    = ",git.StatusIndexDeleted )//删除旧文件执行git add 后的状态
   log.Println("StatusIndexRenamed    = ",git.StatusIndexRenamed )
   log.Println("StatusIndexTypeChange = ",git.StatusIndexTypeChange )
-  log.Println("StatusWtNew           = ",git.StatusWtNew )
-  log.Println("StatusWtModified      = ",git.StatusWtModified )
-  log.Println("StatusWtDeleted       = ",git.StatusWtDeleted )
+  //工作目录中的状态
+  log.Println("StatusWtNew           = ",git.StatusWtNew )//新建文件后啥都不执行的状态
+  log.Println("StatusWtModified      = ",git.StatusWtModified )//修改旧文件后啥都不执行的状态
+  log.Println("StatusWtDeleted       = ",git.StatusWtDeleted )//删除旧文件后啥都不执行的状态
   log.Println("StatusWtTypeChange    = ",git.StatusWtTypeChange )
   log.Println("StatusWtRenamed       = ",git.StatusWtRenamed )
+  //忽略的文件
   log.Println("StatusIgnored         = ",git.StatusIgnored )
+  //冲突的文件
   log.Println("StatusConflicted      = ",git.StatusConflicted )
 
-  // log.Println("DeltaUnmodified  Delta = ",git.DeltaUnmodified)
-  // log.Println("DeltaAdded       Delta = ",git.DeltaAdded     )
-  // log.Println("DeltaDeleted     Delta = ",git.DeltaDeleted   )
-  // log.Println("DeltaModified    Delta = ",git.DeltaModified  )
-  // log.Println("DeltaRenamed     Delta = ",git.DeltaRenamed   )
-  // log.Println("DeltaCopied      Delta = ",git.DeltaCopied    )
-  // log.Println("DeltaIgnored     Delta = ",git.DeltaIgnored   )
-  // log.Println("DeltaUntracked   Delta = ",git.DeltaUntracked )
-  // log.Println("DeltaTypeChange  Delta = ",git.DeltaTypeChange)
-  // log.Println("DeltaUnreadable  Delta = ",git.DeltaUnreadable)
-  // log.Println("DeltaConflicted  Delta = ",git.DeltaConflicted)
+  log.Println("===================head--->index&&index--->workdir======================")
+  log.Println("DeltaUnmodified  Delta = ",git.DeltaUnmodified)
+  log.Println("DeltaAdded       Delta = ",git.DeltaAdded     )
+  log.Println("DeltaDeleted     Delta = ",git.DeltaDeleted   )
+  log.Println("DeltaModified    Delta = ",git.DeltaModified  )
+  log.Println("DeltaRenamed     Delta = ",git.DeltaRenamed   )
+  log.Println("DeltaCopied      Delta = ",git.DeltaCopied    )
+  log.Println("DeltaIgnored     Delta = ",git.DeltaIgnored   )
+  log.Println("DeltaUntracked   Delta = ",git.DeltaUntracked )
+  log.Println("DeltaTypeChange  Delta = ",git.DeltaTypeChange)
+  log.Println("DeltaUnreadable  Delta = ",git.DeltaUnreadable)
+  log.Println("DeltaConflicted  Delta = ",git.DeltaConflicted)
+
+
+
   // const (
   // 	DeltaUnmodified Delta = C.GIT_DELTA_UNMODIFIED
   // 	DeltaAdded      Delta = C.GIT_DELTA_ADDED
@@ -157,5 +306,16 @@ func main() {
   // 	DeltaUnreadable Delta = C.GIT_DELTA_UNREADABLE
   // 	DeltaConflicted Delta = C.GIT_DELTA_CONFLICTED
   // )
-
+  log.Println("==================diff flag ======================")
+  log.Println("DiffFlagBinary  Delta = ",git.DiffFlagBinary)
+  log.Println("DiffFlagNotBinary  Delta = ",git.DiffFlagNotBinary)
+  log.Println("DiffFlagValidOid  Delta = ",git.DiffFlagValidOid)
+  log.Println("DiffFlagExists  Delta = ",git.DiffFlagExists)
+//   const (
+// 	DiffFlagBinary    DiffFlag = C.GIT_DIFF_FLAG_BINARY
+// 	DiffFlagNotBinary DiffFlag = C.GIT_DIFF_FLAG_NOT_BINARY
+// 	DiffFlagValidOid  DiffFlag = C.GIT_DIFF_FLAG_VALID_ID
+// 	DiffFlagExists    DiffFlag = C.GIT_DIFF_FLAG_EXISTS
+//   )
+  StatusList.Free()
 }  
