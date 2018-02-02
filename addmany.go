@@ -5,7 +5,7 @@ import (
   log "github.com/sirupsen/logrus"
 )
 func main() {
-	repo, err := git.OpenRepository("/tmp/code")
+	repo, err := git.OpenRepository("/tmp/code2")
 	if err != nil {
 		log.Println(err)
 		return
@@ -18,7 +18,8 @@ func main() {
 	}
 	var path []string
 	//path := []string{'a.txt','b.txt','c.txt'}
-	pathAll := append(path,"1.txt","2.txt","README.md","demo.php","fuck.php")
+	// pathAll := append(path,"1.txt","2.txt","README.md","demo.php","fuck.php")
+	pathAll := append(path,".")
 	log.Println(pathAll)
 	err = idx.AddAll(pathAll, git.IndexAddDefault, nil)
 	if err != nil {
